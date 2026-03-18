@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quizly – Học tập</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe',
+                            300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6',
+                            600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af',
+                            900: '#1e3a8a', 950: '#172554'
+                        },
+                        success: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a' },
+                        danger:  { 50: '#fef2f2', 100: '#fee2e2', 500: '#ef4444', 600: '#dc2626' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn  { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes shakeX {
+            0%,100%{transform:translateX(0)}
+            20%{transform:translateX(-8px)}
+            40%{transform:translateX(8px)}
+            60%{transform:translateX(-6px)}
+            80%{transform:translateX(6px)}
+        }
+        .spinner  { animation: spin 1s linear infinite; }
+        .fade-in  { animation: fadeIn 0.35s ease-out both; }
+        .pop-in   { animation: popIn  0.25s ease-out both; }
+        .shake    { animation: shakeX 0.45s ease-out; }
+        html { scroll-behavior: smooth; }
+        .choice-item { transition: all 0.15s; }
+        .progress-bar { transition: width 0.4s ease; }
+        /* custom radio highlight */
+        .choice-item:has(input:checked) { border-color: #3b82f6; background: #eff6ff; }
+        .tf-btn:has(input:checked) { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-primary-600 to-primary-900 min-h-screen font-sans text-primary-950">
+
+<!-- ─────────────────────────── LOADING ─────────────────────────── -->
+<div id="loadingScreen" class="flex flex-col items-center justify-center min-h-screen text-white px-4">
+    <div class="w-12 h-12 border-4 border-white/30 border-t-white rounded-full spinner mb-4"></div>
+    <p id="loadingText" class="text-lg mb-4">Đang tải bài học...</p>
+    <div id="progressContainer" class="w-full max-w-xs hidden">
+        <div class="bg-white/20 rounded-full h-3 overflow-hidden">
+            <div id="progressBar" class="progress-bar bg-white h-full rounded-full" style="width:0%"></div>
+        </div>
+        <p id="progressText" class="text-sm text-white/80 mt-2 text-center">0%</p>
+    </div>
+</div>
+
+<!-- ─────────────────────────── ERROR ─────────────────────────── -->
+<div id="errorScreen" class="hidden items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-10 rounded-2xl text-center max-w-md shadow-2xl">
+        <h1 class="text-7xl text-danger-500 mb-4">404</h1>
+        <h2 class="text-2xl font-bold text-primary-900 mb-4">Không tìm thấy bài học</h2>
+        <p class="text-primary-700 mb-6">URL ZIP không hợp lệ hoặc không thể truy cập.</p>
+        <a href="https://maple-zip.github.io/quizly" class="inline-block bg-primary-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-700 transition-colors">← Quay về Quizly</a>
+    </div>
+</div>
+
+<!-- ─────────────────────────── INFO ─────────────────────────── -->
+<div id="infoScreen" class="hidden items-center justify-center min-h-screen p-4">
+    <a href="https://maple-zip.github.io/quizly" class="fixed top-4 left-4 z-50" target="_blank">
+        <div class="bg-white/95 px-4 py-2 rounded-lg shadow-lg">
+            <span class="text-xl font-bold text-primary-600">Quizly</span>
+        </div>
+    </a>
+    <div class="bg-white p-8 sm:p-12 rounded-2xl max-w-2xl w-full shadow-2xl">
+        <!-- Study badge -->
+        <div class="flex justify-center mb-4">
+            <span class="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-4 py-1.5 rounded-full text-sm font-semibold">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                Chế độ Học tập
+            </span>
+        </div>
+        <h1 id="infoTitle" class="text-2xl sm:text-3xl font-bold text-primary-900 mb-6 text-center"></h1>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div class="flex flex-col gap-1">
+                <span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Môn học</span>
+                <span id="infoSubject" class="text-lg text-primary-900"></span>
+            </div>
+            <div class="flex flex-col gap-1">
+                <span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Khối</span>
+                <span id="infoGrade" class="text-lg text-primary-900"></span>
+            </div>
+            <div class="flex flex-col gap-1">
+                <span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Tác giả</span>
+                <span id="infoAuthor" class="text-lg text-primary-900"></span>
+            </div>
+            <div class="flex flex-col gap-1">
+                <span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Tổng số câu</span>
+                <span id="infoCount" class="text-lg text-primary-900"></span>
+            </div>
+        </div>
+        <div id="infoDesc" class="bg-primary-50 p-4 rounded-lg text-primary-800 mb-8 leading-relaxed"></div>
+        <!-- How it works -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 text-sm text-amber-800 space-y-1">
+            <p class="font-semibold mb-2">📖 Cách hoạt động</p>
+            <p>• Mỗi câu hiển thị một lần – chọn đáp án để xem kết quả ngay.</p>
+            <p>• Trả lời <span class="text-success-600 font-semibold">đúng</span>: câu được đánh dấu hoàn thành.</p>
+            <p>• Trả lời <span class="text-danger-600 font-semibold">sai</span>: câu được thêm vào cuối hàng đợi để ôn lại.</p>
+            <p>• Hoàn thành khi tất cả câu được trả lời đúng ít nhất một lần.</p>
+        </div>
+        <button id="startStudyBtn" class="w-full bg-primary-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-primary-700 transition-all hover:shadow-lg active:scale-[0.98]">
+            Bắt đầu học
+        </button>
+    </div>
+</div>
+
+<!-- ─────────────────────────── STUDY SCREEN ─────────────────────────── -->
+<div id="studyScreen" class="hidden min-h-screen pb-12">
+
+    <!-- Top bar -->
+    <div class="sticky top-0 z-40 bg-white/95 backdrop-blur shadow-md">
+        <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+            <!-- Logo -->
+            <a href="https://maple-zip.github.io/quizly" target="_blank" class="flex-shrink-0">
+                <span class="text-base font-bold text-primary-600">Quizly</span>
+            </a>
+            <!-- Progress bar wrapper -->
+            <div class="flex-1 flex flex-col gap-1 min-w-0">
+                <div class="flex justify-between text-xs text-primary-500">
+                    <span id="progressLabel">Câu 1 / 0</span>
+                    <span id="masteredLabel">✓ 0 đã thuộc</span>
+                </div>
+                <div class="bg-primary-100 rounded-full h-2 overflow-hidden">
+                    <div id="studyProgressBar" class="progress-bar bg-primary-500 h-full rounded-full" style="width:0%"></div>
+                </div>
+            </div>
+            <!-- Retry counter badge -->
+            <div id="retryBadge" class="hidden flex-shrink-0 bg-amber-100 text-amber-700 text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
+                🔄 <span id="retryCount">0</span> ôn lại
+            </div>
+        </div>
+    </div>
+
+    <!-- Question card area -->
+    <div class="max-w-2xl mx-auto px-4 pt-6">
+        <div id="questionCard" class="fade-in">
+            <!-- rendered dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- ─────────────────────────── COMPLETE SCREEN ─────────────────────────── -->
+<div id="completeScreen" class="hidden items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 sm:p-12 rounded-2xl max-w-lg w-full shadow-2xl text-center fade-in">
+        <div class="text-6xl mb-4">🎉</div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-primary-900 mb-3">Hoàn thành!</h1>
+        <p class="text-primary-600 mb-8">Bạn đã trả lời đúng tất cả câu hỏi.</p>
+        <div class="grid grid-cols-2 gap-4 mb-8">
+            <div class="bg-primary-50 p-5 rounded-xl">
+                <div class="text-3xl font-bold text-primary-700 mb-1" id="statTotal"></div>
+                <div class="text-sm text-primary-500">Tổng câu hỏi</div>
+            </div>
+            <div class="bg-success-50 p-5 rounded-xl">
+                <div class="text-3xl font-bold text-success-600 mb-1" id="statFirstTry"></div>
+                <div class="text-sm text-primary-500">Đúng ngay lần đầu</div>
+            </div>
+            <div class="bg-amber-50 p-5 rounded-xl">
+                <div class="text-3xl font-bold text-amber-600 mb-1" id="statRetried"></div>
+                <div class="text-sm text-primary-500">Cần ôn lại</div>
+            </div>
+            <div class="bg-primary-50 p-5 rounded-xl">
+                <div class="text-3xl font-bold text-primary-700 mb-1" id="statTime"></div>
+                <div class="text-sm text-primary-500">Thời gian</div>
+            </div>
+        </div>
+        <button id="restartBtn" class="w-full bg-primary-600 text-white py-3 rounded-xl font-bold text-lg hover:bg-primary-700 transition-all hover:shadow-lg active:scale-[0.98]">
+            Học lại từ đầu
+        </button>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  Global state
+// ══════════════════════════════════════════════════════════════
+let configData = null, questionsData = null;
+let questions = [];          // shuffled master list
+let mediaFiles = {};
+let currentPlayingMedia = null;
+
+// Study state
+let queue = [];              // indices into `questions` still to answer (+ repeats)
+let masteredSet = new Set(); // indices of questions answered correctly at least once
+let currentQIdx = null;      // index of current question being shown
+let answered = false;        // whether answer has been submitted for current card
+let startTime = null;
+let firstTryWrong = new Set(); // questions that were wrong at least once
+
+const urlParams = new URLSearchParams(window.location.search);
+const zipUrl = urlParams.get('zip');
+
+// ══════════════════════════════════════════════════════════════
+//  Bootstrap
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!zipUrl) { showError(); return; }
+    try {
+        await loadZip(zipUrl);
+        showInfo();
+    } catch (e) {
+        console.error(e);
+        showError();
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  ZIP Loading
+// ══════════════════════════════════════════════════════════════
+function updateProgress(pct, text) {
+    document.getElementById('progressContainer').classList.remove('hidden');
+    document.getElementById('progressBar').style.width = `${pct}%`;
+    document.getElementById('progressText').textContent = `${Math.round(pct)}%`;
+    if (text) document.getElementById('loadingText').textContent = text;
+}
+
+async function loadZip(url) {
+    updateProgress(0, 'Đang tải file...');
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Fetch failed');
+
+    const total = parseInt(res.headers.get('content-length') || '0', 10);
+    let loaded = 0;
+    const reader = res.body.getReader(), chunks = [];
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        loaded += value.length;
+        if (total) updateProgress((loaded / total) * 50, 'Đang tải...');
+    }
+    const buf = new Uint8Array(loaded); let pos = 0;
+    for (const c of chunks) { buf.set(c, pos); pos += c.length; }
+
+    updateProgress(50, 'Đang giải nén...');
+    const zip = await JSZip.loadAsync(buf);
+
+    updateProgress(60, 'Đang đọc cấu hình...');
+    const cfgFile = zip.file('config.yaml');
+    if (!cfgFile) throw new Error('config.yaml not found');
+    configData = jsyaml.load(await cfgFile.async('text'));
+
+    updateProgress(70, 'Đang đọc câu hỏi...');
+    const qFile = zip.file('questions.yaml');
+    if (!qFile) throw new Error('questions.yaml not found');
+    questionsData = jsyaml.load(await qFile.async('text'));
+
+    updateProgress(80, 'Đang tải media...');
+    const mediaFolder = zip.folder('media');
+    if (mediaFolder) {
+        const entries = [];
+        mediaFolder.forEach((p, f) => { if (!f.dir) entries.push({ p, f }); });
+        for (let i = 0; i < entries.length; i++) {
+            const { p, f } = entries[i];
+            mediaFiles[p] = URL.createObjectURL(await f.async('blob'));
+            updateProgress(80 + (i + 1) / entries.length * 15, 'Đang tải media...');
+        }
+    }
+
+    updateProgress(95, 'Đang xử lý câu hỏi...');
+
+    // Build question pool (same grouping logic as original)
+    const raw = (questionsData.questions || [])
+        .map((q, i) => ({ ...q, originalIndex: i, id: `q${i}` }))
+        .filter(q => q.type !== 'essay');
+
+    const mc = raw.filter(q => q.type === 'multiple_choice');
+    const tf = raw.filter(q => q.type === 'true_false_group');
+
+    if (configData.exam && configData.exam.shuffle_questions) {
+        shuffleArray(mc); shuffleArray(tf);
+    }
+    questions = [...mc, ...tf];
+
+    if (configData.exam && configData.exam.shuffle_answers) {
+        questions.forEach(q => {
+            if (q.type === 'multiple_choice') shuffleChoices(q);
+            else if (q.type === 'true_false_group') shuffleItems(q);
+        });
+    } else {
+        questions.forEach(q => {
+            if (q.type === 'multiple_choice' && !q.shuffledChoices) shuffleChoicesKeepOrder(q);
+            else if (q.type === 'true_false_group' && !q.shuffledItems) shuffleItemsKeepOrder(q);
+        });
+    }
+
+    updateProgress(100, 'Hoàn tất!');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Info screen
+// ══════════════════════════════════════════════════════════════
+function showInfo() {
+    document.getElementById('loadingScreen').classList.add('hidden');
+    const s = document.getElementById('infoScreen');
+    s.classList.remove('hidden'); s.classList.add('flex');
+
+    document.getElementById('infoTitle').textContent   = configData.metadata.title;
+    document.getElementById('infoSubject').textContent = configData.metadata.subject;
+    document.getElementById('infoGrade').textContent   = `Lớp ${configData.metadata.grade}`;
+    document.getElementById('infoAuthor').textContent  = configData.metadata.author;
+    document.getElementById('infoCount').textContent   = `${questions.length} câu`;
+    document.getElementById('infoDesc').textContent    = configData.exam.description || '';
+
+    document.getElementById('startStudyBtn').addEventListener('click', startStudy);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Study session
+// ══════════════════════════════════════════════════════════════
+function startStudy() {
+    const s = document.getElementById('infoScreen');
+    s.classList.add('hidden'); s.classList.remove('flex');
+    document.getElementById('studyScreen').classList.remove('hidden');
+
+    // Build initial queue: one slot per question (by index in questions[])
+    queue = questions.map((_, i) => i);
+    masteredSet = new Set();
+    firstTryWrong = new Set();
+    startTime = Date.now();
+
+    document.title = configData.metadata.title + ' – Học tập';
+
+    nextQuestion();
+}
+
+function nextQuestion() {
+    if (queue.length === 0) {
+        showComplete();
+        return;
+    }
+    currentQIdx = queue.shift();
+    answered = false;
+    renderCard(currentQIdx);
+    updateProgressBar();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Progress bar
+// ══════════════════════════════════════════════════════════════
+function updateProgressBar() {
+    const total = questions.length;
+    const mastered = masteredSet.size;
+    const pct = total > 0 ? (mastered / total) * 100 : 0;
+
+    document.getElementById('studyProgressBar').style.width = `${pct}%`;
+    document.getElementById('progressLabel').textContent =
+        `Câu ${mastered + 1 <= total ? mastered + 1 : total} / ${total}`;
+    document.getElementById('masteredLabel').textContent = `✓ ${mastered} đã thuộc`;
+
+    // Retry badge
+    const badge = document.getElementById('retryBadge');
+    const retries = queue.filter(i => firstTryWrong.has(i)).length;
+    if (retries > 0) {
+        badge.classList.remove('hidden');
+        document.getElementById('retryCount').textContent = retries;
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Render question card
+// ══════════════════════════════════════════════════════════════
+function renderCard(qIdx) {
+    const q = questions[qIdx];
+    const card = document.getElementById('questionCard');
+    card.className = 'fade-in';
+
+    // Section label
+    const typeLabel = q.type === 'multiple_choice'
+        ? '<span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Trắc nghiệm</span>'
+        : '<span class="text-xs font-semibold text-primary-500 uppercase tracking-wide">Đúng / Sai</span>';
+
+    const qNum = masteredSet.size + 1;
+
+    let html = `
+        <div class="mb-3 flex items-center justify-between">
+            ${typeLabel}
+            <span class="text-xs text-primary-400">Câu ${qNum}</span>
+        </div>
+        <div class="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+            <div class="text-base sm:text-lg leading-relaxed text-primary-900 mb-6">
+    `;
+    if (q.question && q.question.text) html += marked.parse(q.question.text);
+    if (q.question && q.question.media) html += renderMedia(q.question.media);
+    html += '</div>';
+
+    if (q.type === 'multiple_choice') {
+        html += renderMCChoices(q, qIdx);
+    } else if (q.type === 'true_false_group') {
+        html += renderTFChoices(q, qIdx);
+    }
+
+    html += '</div>';
+    card.innerHTML = html;
+    setupMediaPlayers();
+
+    // Void timeout to force animation re-trigger
+    void card.offsetWidth;
+    card.classList.add('fade-in');
+}
+
+// ── Multiple Choice ──────────────────────────────────────────
+function renderMCChoices(q, qIdx) {
+    let html = '<div class="space-y-3" id="mc-choices">';
+    q.shuffledChoices.forEach((choice, ci) => {
+        html += `
+            <button
+                data-ci="${ci}"
+                onclick="submitMC(${qIdx}, ${ci})"
+                class="choice-btn w-full flex items-start gap-3 p-4 rounded-xl border-2 border-primary-100
+                       bg-white hover:border-primary-300 hover:bg-primary-50 transition-all text-left cursor-pointer">
+                <span class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full
+                             bg-primary-100 text-primary-700 text-sm font-bold">${ci + 1}</span>
+                <span class="flex-1 text-primary-800">${choice.text || ''}</span>
+            `;
+        if (choice.media) html += renderMedia(choice.media);
+        html += '</button>';
+    });
+    html += '</div>';
+    return html;
+}
+
+function submitMC(qIdx, chosenCI) {
+    if (answered) return;
+    answered = true;
+
+    const q = questions[qIdx];
+    const correctCI = q.shuffledChoices.findIndex(c => c.originalKey === q.correct);
+    const isCorrect = (chosenCI === correctCI);
+
+    // Disable all buttons & colour them
+    document.querySelectorAll('.choice-btn').forEach(btn => {
+        btn.disabled = true;
+        btn.onclick = null;
+        const ci = parseInt(btn.dataset.ci);
+        if (ci === correctCI) {
+            btn.classList.add('border-success-500', 'bg-success-50');
+            btn.classList.remove('border-primary-100', 'bg-white');
+        } else if (ci === chosenCI && !isCorrect) {
+            btn.classList.add('border-danger-500', 'bg-danger-50');
+            btn.classList.remove('border-primary-100', 'bg-white');
+        }
+    });
+
+    showFeedback(qIdx, isCorrect, () => nextQuestion());
+}
+
+// ── True/False Group ─────────────────────────────────────────
+// For TF we collect all answers then submit
+let tfAnswers = {};
+
+function renderTFChoices(q, qIdx) {
+    tfAnswers = {};
+
+    let html = '<div class="space-y-4" id="tf-items">';
+    q.shuffledItems.forEach((item, ii) => {
+        html += `
+            <div class="p-4 bg-primary-50 rounded-xl" id="tf-item-${ii}">
+                <div class="flex items-start gap-2 mb-3">
+                    <span class="flex-shrink-0 font-semibold text-primary-600">${ii + 1}.</span>
+                    <span class="text-primary-800">${item.text || ''}</span>
+                </div>`;
+        if (item.media) html += renderMedia(item.media);
+        html += `
+                <div class="flex gap-3 mt-3">
+                    <button onclick="pickTF(${qIdx},${ii},true,this)"
+                        data-val="true"
+                        class="tf-opt flex-1 py-2 px-4 rounded-lg border-2 border-primary-200 bg-white
+                               font-semibold text-primary-700 hover:border-primary-400 transition-all">
+                        Đúng
+                    </button>
+                    <button onclick="pickTF(${qIdx},${ii},false,this)"
+                        data-val="false"
+                        class="tf-opt flex-1 py-2 px-4 rounded-lg border-2 border-primary-200 bg-white
+                               font-semibold text-primary-700 hover:border-primary-400 transition-all">
+                        Sai
+                    </button>
+                </div>
+            </div>`;
+    });
+    html += '</div>';
+
+    // Submit button – hidden until all items answered
+    html += `
+        <button id="tfSubmitBtn"
+            onclick="submitTF(${qIdx})"
+            class="hidden mt-5 w-full bg-primary-600 text-white py-3.5 rounded-xl font-bold
+                   text-base hover:bg-primary-700 transition-all hover:shadow-lg active:scale-[0.98]">
+            Xác nhận đáp án
+        </button>`;
+    return html;
+}
+
+function pickTF(qIdx, itemIdx, val, btn) {
+    if (answered) return;
+    const container = btn.closest('[id^="tf-item-"]');
+    container.querySelectorAll('.tf-opt').forEach(b => {
+        b.classList.remove('border-primary-500', 'bg-primary-100');
+        b.classList.add('border-primary-200', 'bg-white');
+    });
+    btn.classList.remove('border-primary-200', 'bg-white');
+    btn.classList.add('border-primary-500', 'bg-primary-100');
+
+    tfAnswers[itemIdx] = val;
+
+    // Show confirm button when all items answered
+    const q = questions[qIdx];
+    if (Object.keys(tfAnswers).length === q.shuffledItems.length) {
+        const sb = document.getElementById('tfSubmitBtn');
+        if (sb) { sb.classList.remove('hidden'); sb.classList.add('pop-in'); }
+    }
+}
+
+function submitTF(qIdx) {
+    if (answered) return;
+    answered = true;
+
+    const q = questions[qIdx];
+    let allCorrect = true;
+
+    // Disable & colour each item
+    q.shuffledItems.forEach((item, ii) => {
+        const container = document.getElementById(`tf-item-${ii}`);
+        if (!container) return;
+        const userVal = tfAnswers[ii];
+        const isItemCorrect = (userVal === item.correct);
+        if (!isItemCorrect) allCorrect = false;
+
+        // Colour buttons
+        container.querySelectorAll('.tf-opt').forEach(b => {
+            b.disabled = true;
+            b.onclick = null;
+            const bval = b.dataset.val === 'true';
+            if (bval === item.correct) {
+                b.classList.add('border-success-500', 'bg-success-50', 'text-success-700');
+                b.classList.remove('border-primary-200', 'bg-white');
+            }
+            if (bval === userVal && !isItemCorrect) {
+                b.classList.add('border-danger-500', 'bg-danger-50', 'text-danger-700');
+            }
+        });
+
+        // Show correct answer note if wrong
+        if (!isItemCorrect) {
+            const note = document.createElement('p');
+            note.className = 'text-xs text-danger-600 mt-2 font-medium';
+            note.textContent = `Đáp án đúng: ${item.correct ? 'Đúng' : 'Sai'}`;
+            container.appendChild(note);
+        }
+    });
+
+    // Hide submit button
+    const sb = document.getElementById('tfSubmitBtn');
+    if (sb) sb.classList.add('hidden');
+
+    showFeedback(qIdx, allCorrect, () => nextQuestion());
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Feedback banner
+// ══════════════════════════════════════════════════════════════
+function showFeedback(qIdx, isCorrect, onNext) {
+    if (isCorrect) {
+        masteredSet.add(qIdx);
+    } else {
+        firstTryWrong.add(qIdx);
+        queue.push(qIdx); // re-queue at the end
+    }
+
+    updateProgressBar();
+
+    // Build feedback block
+    const fb = document.createElement('div');
+    fb.className = `mt-5 p-5 rounded-xl border-2 pop-in ${
+        isCorrect
+          ? 'bg-success-50 border-success-300 text-success-700'
+          : 'bg-danger-50  border-danger-300  text-danger-700'
+    }`;
+
+    // Shake card if wrong
+    if (!isCorrect) {
+        const card = document.getElementById('questionCard');
+        card.classList.add('shake');
+        card.addEventListener('animationend', () => card.classList.remove('shake'), { once: true });
+    }
+
+    const icon = isCorrect ? '✅' : '❌';
+    const title = isCorrect ? 'Chính xác!' : 'Chưa đúng – sẽ ôn lại sau';
+    const sub = isCorrect
+        ? 'Tuyệt vời, tiếp tục phát huy!'
+        : `Câu này sẽ xuất hiện lại để bạn luyện tập thêm. Còn <strong>${queue.length}</strong> câu trong hàng đợi.`;
+
+    fb.innerHTML = `
+        <div class="flex items-center gap-3 mb-3">
+            <span class="text-2xl">${icon}</span>
+            <span class="text-lg font-bold">${title}</span>
+        </div>
+        <p class="text-sm mb-4 opacity-90">${sub}</p>
+        <button
+            class="w-full py-3 px-6 rounded-xl font-bold text-white transition-all hover:shadow-md active:scale-[0.98]
+                   ${isCorrect ? 'bg-success-500 hover:bg-success-600' : 'bg-danger-500 hover:bg-danger-600'}"
+            onclick="this.closest('.pop-in').remove(); (${onNext.toString()})()">
+            ${queue.length === 0 && isCorrect ? '🎉 Hoàn thành!' : 'Câu tiếp theo →'}
+        </button>
+    `;
+
+    // Append below the card
+    const cardDiv = document.getElementById('questionCard');
+    cardDiv.appendChild(fb);
+
+    // Scroll into view on mobile
+    setTimeout(() => fb.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Complete screen
+// ══════════════════════════════════════════════════════════════
+function showComplete() {
+    document.getElementById('studyScreen').classList.add('hidden');
+    const s = document.getElementById('completeScreen');
+    s.classList.remove('hidden'); s.classList.add('flex');
+
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('statTotal').textContent     = questions.length;
+    document.getElementById('statFirstTry').textContent  = questions.length - firstTryWrong.size;
+    document.getElementById('statRetried').textContent   = firstTryWrong.size;
+    document.getElementById('statTime').textContent      = formatTime(elapsed);
+
+    document.getElementById('restartBtn').addEventListener('click', () => location.reload());
+}
+
+function formatTime(s) {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+function pad(n) { return n.toString().padStart(2, '0'); }
+
+// ══════════════════════════════════════════════════════════════
+//  Media helpers (identical to original)
+// ══════════════════════════════════════════════════════════════
+function renderMedia(media) {
+    if (!media) return '';
+    const urls = Array.isArray(media) ? media : [media];
+    let html = '<div class="mt-3 space-y-2">';
+    urls.forEach(fn => {
+        const url = mediaFiles[fn]; if (!url) return;
+        const ext = fn.split('.').pop().toLowerCase();
+        const imgs = ['png','jpg','jpeg','gif','svg','webp','bmp'];
+        const auds = ['mp3','wav','ogg','m4a','aac','flac'];
+        const vids = ['mp4','webm','mov','avi'];
+        if (imgs.includes(ext)) html += `<img src="${url}" alt="media" class="max-w-full max-h-72 rounded-lg shadow-sm">`;
+        else if (auds.includes(ext)) html += `<audio controls src="${url}" class="w-full media-player"></audio>`;
+        else if (vids.includes(ext)) html += `<video controls src="${url}" class="w-full rounded-lg media-player"></video>`;
+    });
+    html += '</div>';
+    return html;
+}
+
+function setupMediaPlayers() {
+    document.querySelectorAll('.media-player').forEach(m => {
+        m.addEventListener('play', function () {
+            if (currentPlayingMedia && currentPlayingMedia !== this) currentPlayingMedia.pause();
+            currentPlayingMedia = this;
+        });
+    });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  Shuffle helpers (same as original)
+// ══════════════════════════════════════════════════════════════
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+}
+function shuffleChoices(q) {
+    const e = Object.entries(q.choices || {}).map(([k, v]) => ({ ...v, originalKey: k }));
+    shuffleArray(e); q.shuffledChoices = e;
+}
+function shuffleItems(q) {
+    const e = Object.entries(q.items || {}).map(([k, v]) => ({ ...v, originalKey: k }));
+    shuffleArray(e); q.shuffledItems = e;
+}
+function shuffleChoicesKeepOrder(q) {
+    q.shuffledChoices = Object.entries(q.choices || {}).map(([k, v]) => ({ ...v, originalKey: k }));
+}
+function shuffleItemsKeepOrder(q) {
+    q.shuffledItems = Object.entries(q.items || {}).map(([k, v]) => ({ ...v, originalKey: k }));
+}
+
+function showError() {
+    document.getElementById('loadingScreen').classList.add('hidden');
+    const s = document.getElementById('errorScreen');
+    s.classList.remove('hidden'); s.classList.add('flex');
+}
+</script>
+</body>
+</html>
